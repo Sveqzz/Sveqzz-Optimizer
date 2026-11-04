@@ -39,6 +39,13 @@ const { TWEAKS, MODES, modeTweakIds } = require('../src/engine/catalog');
   assert.strictEqual(snap(), before, 'el registro no quedó idéntico tras revertir');
   assert.strictEqual(be.keys.size, 0, 'quedó una clave creada');
 
+  // Herramientas: apps, benchmark y autoprueba (backend simulado)
+  assert((await api.toolsApps()).length > 0);
+  const bn = await api.benchRun('before'); assert(bn.before && bn.before.cpuMs > 0);
+  const tids = await api.testIds(); assert(tids.length > 50, 'testIds vacío');
+  const tr = await api.testRun(tids.slice(0, 20)); assert(tr.ok.length + tr.failApply.length + tr.failRevert.length + tr.error.length > 0);
+  assert.strictEqual(snap(), before, 'la autoprueba dejó cambios en el registro');
+
   // Modos (con hardware laptop: noLaptop se omite)
   const facts = eng.getFacts();
   for (const m of MODES) console.log(m.id.padEnd(12), String(modeTweakIds(m, facts).length).padStart(3), 'ajustes');

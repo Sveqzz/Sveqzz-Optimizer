@@ -38,7 +38,7 @@ const I = (n, s = 18) => `<svg class="i" width="${s}" height="${s}" viewBox="0 0
 
 const NAV = [
   ['inicio', 'Inicio', 'home'], ['mipc', 'Mi PC', 'cpu'], ['modos', 'Modos', 'layers'],
-  ['_', 'OPTIMIZAR'], ['optimizacion', 'Optimización', 'sliders'], ['juegos', 'Centro de juegos', 'gamepad'], ['procesos', 'Procesos y servicios', 'cpu'], ['dispositivos', 'Prioridad de dispositivos', 'bolt'], ['launchers', 'Steam, Epic y Discord', 'download'], ['drivers', 'Actualizaciones', 'refresh'], ['crashes', 'Diagnóstico de crashes', 'alert'], ['limpieza', 'Limpieza', 'trash'], ['red', 'Red y ping', 'wifi'], ['arranque', 'Inicio de Windows', 'power'],
+  ['_', 'OPTIMIZAR'], ['optimizacion', 'Optimización', 'sliders'], ['juegos', 'Centro de juegos', 'gamepad'], ['procesos', 'Procesos y servicios', 'cpu'], ['dispositivos', 'Prioridad de dispositivos', 'bolt'], ['launchers', 'Steam, Epic y Discord', 'download'], ['drivers', 'Actualizaciones', 'refresh'], ['herramientas', 'Herramientas', 'sliders'], ['crashes', 'Diagnóstico de crashes', 'alert'], ['limpieza', 'Limpieza', 'trash'], ['red', 'Red y ping', 'wifi'], ['arranque', 'Inicio de Windows', 'power'],
   ['_', 'SEGURIDAD'], ['historial', 'Historial y deshacer', 'history'], ['_', 'APP'], ['ajustes', 'Ajustes y Discord', 'settings'],
 ];
 const S = { pq: '', pf: 'rec', page: 'inicio', info: null, desired: new Map(), cat: 'all', q: '', risk: 'all', only: 'all', busy: false, reboot: false, overlay: false, net: {}, cleanSel: new Set(), openMore: new Set(), game: null };
@@ -386,6 +386,35 @@ async function pageDrivers() {
   <div class="row" style="margin-top:14px"><button class="btn" data-go="drivers">${I('refresh', 15)} Volver a buscar</button></div>`);
 }
 
+// ───────── HERRAMIENTAS (apps, benchmark, autoprueba) ─────────
+const benchRow = (l, a, b, low) => { const d = a != null && b != null ? (b - a) / a * 100 : null; const good = d != null && (low ? d < -1 : d > 1); const bad = d != null && (low ? d > 1 : d < -1); return `<tr><td>${l}</td><td>${a ?? '–'}</td><td>${b ?? '–'}</td><td style="color:${good ? 'var(--ok)' : bad ? 'var(--bad)' : 'var(--muted)'}">${d == null ? '' : (d > 0 ? '+' : '') + d.toFixed(1) + '%'}</td></tr>`; };
+function benchHtml(b) {
+  const x = b.before, y = b.after;
+  if (!x) return '<div class="muted small">Aún no hay medición. Pulsa «Medir ahora (antes)», aplica un modo, reinicia y pulsa «Medir (después)».</div>';
+  return `<table class="tbl" style="width:100%;text-align:left"><tr><th>Medida</th><th>Antes</th><th>Después</th><th>Cambio</th></tr>${benchRow('CPU (ms, menos es mejor)', x.cpuMs, y && y.cpuMs, 1)}${benchRow('Memoria (GB/s)', x.memGBs, y && y.memGBs, 0)}${benchRow('Temporizador medio (ms, ~input lag)', x.timerAvg, y && y.timerAvg, 1)}${benchRow('Temporizador p95 (ms)', x.timerP95, y && y.timerP95, 1)}${benchRow('Ping 1.1.1.1 (ms)', x.ping, y && y.ping, 1)}</table>`;
+}
+async function pageTools() {
+  setPage('<h1>Herramientas</h1>' + skeleton(3));
+  const [apps, bench] = await Promise.all([call('toolsApps').catch(() => []), call('benchGet')]);
+  setPage(`<h1>Herramientas</h1><p class="sub">Quita apps que no usas, mide cuánto mejora tu PC y comprueba que los ajustes funcionan en tu equipo.</p>
+  <div class="card"><div class="row"><div class="ico">${I('bolt', 18)}</div><div class="sp"><b>Prueba de rendimiento (antes / después)</b><div class="small muted">Mide CPU, memoria, precisión del temporizador (input lag) y ping. Mide antes de optimizar y otra vez después de reiniciar.</div></div><button class="btn" id="bBefore">Medir (antes)</button><button class="btn primary" id="bAfter">Medir (después)</button></div><div id="benchOut" style="margin-top:12px">${benchHtml(bench)}</div></div>
+  <h2>Quitar apps preinstaladas</h2><div class="card"><div class="small muted" style="margin-bottom:10px">Se quitan solo de tu usuario. Si te arrepientes, las reinstalas desde Microsoft Store.</div>
+  ${apps.length ? apps.map((a) => `<label class="sett" style="cursor:pointer"><input type="checkbox" class="appchk" value="${esc(a.id)}"><span class="sp"><b>${esc(a.name)}</b></span></label>`).join('') + `<div class="row" style="margin-top:12px"><button class="btn danger" id="tRemove">${I('trash', 15)} Quitar las marcadas</button></div>` : '<div class="muted">No se encontraron apps para quitar.</div>'}</div>
+  <h2>Probar los ajustes en este PC</h2><div class="card"><div class="small muted" style="margin-bottom:10px">Aplica cada ajuste apagado, comprueba que funcionó y lo revierte. No toca los que ya tienes activos ni los avanzados. Tarda unos minutos; puedes copiar el informe y mandármelo.</div><div class="row"><button class="btn primary" id="tTest">${I('check', 15)} Probar ajustes</button><span id="tProg" class="small muted"></span></div><pre id="tOut" class="mono small" style="white-space:pre-wrap;margin-top:10px"></pre></div>`);
+}
+async function runTest(btn) {
+  const ids = await call('testIds'); const rep = { ok: 0, failApply: [], failRevert: [], error: [] };
+  for (let i = 0; i < ids.length; i += 20) {
+    if (S.page !== 'herramientas') return;
+    $('#tProg').textContent = `Probando ${Math.min(i + 20, ids.length)} de ${ids.length}…`;
+    const r = await call('testRun', ids.slice(i, i + 20)); rep.ok += r.ok.length; for (const k of ['failApply', 'failRevert', 'error']) rep[k].push(...r[k]);
+  }
+  delete C.tw;
+  const txt = `Ajustes que funcionan: ${rep.ok}\nNo se aplicaron (${rep.failApply.length}): ${rep.failApply.map((x) => x.id).join(', ') || '—'}\nNo se revirtieron (${rep.failRevert.length}): ${rep.failRevert.map((x) => x.id).join(', ') || '—'}\nErrores (${rep.error.length}): ${rep.error.map((x) => x.id + ' ' + x.msg).join('; ') || '—'}`;
+  $('#tProg').textContent = 'Listo'; $('#tOut').textContent = txt;
+  try { await navigator.clipboard.writeText(txt); toast('Informe copiado al portapapeles', 'ok'); } catch { /* */ }
+}
+
 // ───────── DIAGNÓSTICO DE CRASHES ─────────
 async function pageCrashes() {
   setPage('<h1>Diagnóstico de crashes</h1><p class="sub">Leyendo el visor de eventos de Windows (puede tardar unos segundos)…</p>' + skeleton(3));
@@ -423,7 +452,7 @@ async function pageAjustes() {
     <div class="sett"><div class="sp"><b>Sveqzz Optimizer 2.0</b><small>Hecho por Sveqzz. Los ajustes se guardan en tu PC, no se envía nada a internet salvo lo que tú pidas (medidor de FPS, ping, Discord local).</small></div></div></div>`);
 }
 
-const PAGES = { drivers: pageDrivers, crashes: pageCrashes, procesos: pageProcesos, dispositivos: pageDispositivos, launchers: pageLaunchers, inicio: pageInicio, mipc: pageMiPc, modos: pageModos, optimizacion: pageOptim, juegos: pageJuegos, limpieza: pageLimpieza, red: pageRed, arranque: pageArranque, historial: pageHist, ajustes: pageAjustes };
+const PAGES = { herramientas: pageTools, drivers: pageDrivers, crashes: pageCrashes, procesos: pageProcesos, dispositivos: pageDispositivos, launchers: pageLaunchers, inicio: pageInicio, mipc: pageMiPc, modos: pageModos, optimizacion: pageOptim, juegos: pageJuegos, limpieza: pageLimpieza, red: pageRed, arranque: pageArranque, historial: pageHist, ajustes: pageAjustes };
 
 // ───────── eventos de la interfaz ─────────
 document.addEventListener('click', async (e) => {
@@ -438,6 +467,9 @@ document.addEventListener('click', async (e) => {
     case 'hBackup': return guard(t, async () => { await call('restorePoint'); toast('Punto de restauración creado', 'ok'); });
     case 'hRam': return guard(t, async () => { const r = await call('appsOptimize'); toast(appsMsg(r), 'ok'); });
     case 'hUndo': if (!window.confirm('¿Deshacer TODOS los ajustes aplicados y volver a los valores originales?')) return; return guard(t, async () => { const r = await call('revertAll'); delete C.tw; delete C.modes; afterApply(r, 'Todo deshecho'); pageInicio(); });
+    case 'bBefore': case 'bAfter': return guard(t, async () => { toast('Midiendo… no uses el PC unos segundos', 'ok'); const b = await call('benchRun', t.id === 'bAfter' ? 'after' : 'before'); $('#benchOut').innerHTML = benchHtml(b); });
+    case 'tRemove': { const ids = [...document.querySelectorAll('.appchk:checked')].map((x) => x.value); if (!ids.length) return toast('Marca alguna app', 'warn'); if (!window.confirm('¿Quitar ' + ids.length + ' app(s)?')) return; return guard(t, async () => { const r = await call('toolsRemoveApps', ids); toast(`${r.done.length} quitadas${r.failed.length ? ', ' + r.failed.length + ' con error' : ''}`, r.failed.length ? 'warn' : 'ok'); pageTools(); }); }
+    case 'tTest': if (!window.confirm('Se aplicarán y revertirán ajustes uno a uno. Cierra tus juegos. ¿Continuar?')) return; return guard(t, () => runTest(t));
     case 'oneClick': return guard(t, async () => { const r = await call('optimizeRecommended'); delete C.tw; afterApply(r, r.count ? `${r.count} ajuste(s) aplicados` : 'Ya estaba todo optimizado'); pageInicio(); });
     case 'selRec': C.tw.v.tweaks.filter((x) => x.rec && x.status !== 'na').forEach((x) => S.desired.set(x.id, true)); drawList(); return drawBar();
     case 'selSafe': C.tw.v.tweaks.filter((x) => x.risk === 'safe' && x.status !== 'na' && !x.warn).forEach((x) => S.desired.set(x.id, true)); drawList(); return drawBar();

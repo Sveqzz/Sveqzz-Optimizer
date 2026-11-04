@@ -214,6 +214,12 @@ function create(dataDir, opts = {}) {
     devicesBoost: (id) => exclusive(async () => { await requireAdmin(); return devices.boost(be, state, String(id)); }),
     devicesRestore: (id) => exclusive(async () => { await requireAdmin(); await devices.restore(be, state, String(id)); return { ok: true }; }),
     // diagnóstico de crashes y perfil de Fortnite
+    toolsApps: () => require('./tools').scanApps(be),
+    toolsRemoveApps: (ids) => exclusive(async () => { await requireAdmin(); return require('./tools').removeApps(be, state, ids); }),
+    async benchRun(kind) { const r = await require('./tools').bench(); state.data.bench = state.data.bench || {}; state.data.bench[kind === 'after' ? 'after' : 'before'] = r; state.save(); return state.data.bench; },
+    async benchGet() { return state.data.bench || {}; },
+    testIds: async () => { const l = await listAll(); return l.tweaks.filter((t) => t.status === 'off' && !t.crash && t.risk !== 'advanced' && !t.touched).map((t) => t.id); },
+    testRun: (ids) => exclusive(async () => { await requireAdmin(); const r = await require('./tools').selfTest(be, state, facts, (ids || []).slice(0, 25)); invalidate(); return r; }),
     driversScan: () => require('./drivers').scan(be),
     crashesScan: async () => { const r = await crashes.scan(be, state); return r; },
     fortniteState: () => fortnite.status(be, state),

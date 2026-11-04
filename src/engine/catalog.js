@@ -321,6 +321,11 @@ add('perf-ntfs-encrypt', 'almacenamiento', 'NTFS: sin cifrado de rutas', 'Desact
 add('perf-sleepstudy', 'energia', 'Sin Sleep Study', 'Evita la recolección de datos de suspensión.', 'safe', [R(LM, 'SYSTEM\\CurrentControlSet\\Control\\Power', 'SleepStudyDisabled', 'DWORD', 1)], { tier: 1 });
 add('perf-bgproc-limit', 'rendimiento', 'Más hilos para colas de E/S', 'IoPriority de procesos de primer plano más alto.', 'medium', [R(LM, 'SYSTEM\\CurrentControlSet\\Control\\PriorityControl', 'IRQ8Priority', 'DWORD', 1)], { tier: 2 });
 
+
+// ───────── EXTREMO (solo escritorio, manual o modo Extremo) ─────────
+add('defender-realtime-off', 'seguridad', 'Desactivar la protección en tiempo real de Defender', 'Defender deja de escanear cada archivo que abre un juego: menos CPU y disco. Si tienes la Protección contra alteraciones activa, Windows lo ignora.', 'advanced', [{ t: 'ps', a: 'Set-MpPreference -DisableRealtimeMonitoring $true', r: 'Set-MpPreference -DisableRealtimeMonitoring $false', c: PS`[bool]((Get-MpPreference).DisableRealtimeMonitoring)` }], { tier: 4, noLaptop: 1, warn: 'Tu PC queda sin antivirus activo. Instala otro o ten cuidado con lo que descargas.' });
+add('smartscreen-off', 'seguridad', 'Desactivar SmartScreen', 'Quita la comprobación de reputación de archivos y apps (menos avisos al abrir cosas).', 'advanced', [R(LM, 'SOFTWARE\\Policies\\Microsoft\\Windows\\System', 'EnableSmartScreen', 'DWORD', 0), R(LM, 'SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Explorer', 'SmartScreenEnabled', 'SZ', 'Off')], { tier: 4, noLaptop: 1, warn: 'Windows ya no te avisa de programas peligrosos.' });
+
 // ───────── KERNEL Y TIMER ─────────
 add('timer-resolution', 'kernel', 'Resolución del temporizador global (Win11)', 'Permite que cada app mantenga timer de 0,5 ms aunque esté minimizada. Solo Windows 11 / Server 2022+.', 'medium', [R(LM, 'SYSTEM\\CurrentControlSet\\Control\\Session Manager\\kernel', 'GlobalTimerResolutionRequests', 'DWORD', 1)], { req: 'win11', reboot: 1, tier: 2, noLaptop: 1 });
 add('dynamic-tick-off', 'kernel', 'Desactivar tick dinámico', 'bcdedit disabledynamictick: el reloj del sistema no entra en modo ahorro. Efecto variable según CPU: mide antes y después.', 'advanced', [bcd('disabledynamictick', 'yes', 'Yes|S[ií]')], { reboot: 1, tier: 3, noLaptop: 1 });
