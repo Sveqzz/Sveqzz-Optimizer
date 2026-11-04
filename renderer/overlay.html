@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="es"><head><meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'">
+<style>
+  html, body { margin: 0; background: transparent; overflow: hidden; font-family: "Segoe UI Variable", "Segoe UI", sans-serif; user-select: none; }
+  .o { margin: 0; padding: 9px 13px 10px; width: 262px; box-sizing: border-box; color: #f2f4fa; border-radius: 12px;
+       background: rgba(9, 11, 18, .58); border: 1px solid rgba(255,255,255,.10); text-shadow: 0 1px 2px #000a; }
+  .top { display: flex; align-items: center; gap: 7px; font-size: 11px; letter-spacing: .06em; color: #b9c0d4; text-transform: uppercase; white-space: nowrap; overflow: hidden; }
+  .dot { width: 7px; height: 7px; border-radius: 50%; background: #34d399; box-shadow: 0 0 8px #34d399; flex: none; }
+  .row { display: flex; align-items: baseline; gap: 14px; margin-top: 4px; }
+  .fps b { font-size: 34px; line-height: 1; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .fps small, .k { font-size: 10px; color: #98a1b8; letter-spacing: .1em; margin-left: 3px; }
+  .low { font-size: 13px; font-variant-numeric: tabular-nums; color: #cfd5e6; }
+  .stats { display: grid; grid-template-columns: repeat(4, auto); justify-content: space-between; margin-top: 7px; font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .stats div span { display: block; font-size: 9px; font-weight: 500; letter-spacing: .12em; color: #8d96ae; }
+  .hint { font-size: 10px; color: #fbbf24; margin-top: 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .g { color: #34d399 } .y { color: #fbbf24 } .r { color: #f87171 }
+</style></head>
+<body><div class="o" id="o">
+  <div class="top"><span class="dot"></span><span id="game">Sveqzz Optimizer</span></div>
+  <div class="row"><div class="fps"><b id="fps">—</b><small>FPS</small></div><div class="low"><span id="low">—</span><span class="k">1% LOW</span></div></div>
+  <div class="stats"><div><b id="ping">—</b><span>PING</span></div><div><b id="cpu">—</b><span>CPU</span></div><div><b id="gpu">—</b><span>GPU</span></div><div><b id="tmp">—</b><span>TEMP</span></div></div>
+  <div class="hint" id="hint" hidden></div>
+</div>
+<script src="overlay.js"></script></body></html>
