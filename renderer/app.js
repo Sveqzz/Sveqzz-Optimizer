@@ -37,10 +37,18 @@ const P = {
 const I = (n, s = 18) => `<svg class="i" width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${P[n] || ''}</svg>`;
 
 const NAV = [
-  ['inicio', 'Inicio', 'home'], ['mipc', 'Mi PC', 'cpu'], ['modos', 'Modos', 'layers'],
-  ['_', 'OPTIMIZAR'], ['optimizacion', 'Optimización', 'sliders'], ['juegos', 'Centro de juegos', 'gamepad'], ['procesos', 'Procesos y servicios', 'cpu'], ['dispositivos', 'Prioridad de dispositivos', 'bolt'], ['launchers', 'Steam, Epic y Discord', 'download'], ['drivers', 'Actualizaciones', 'refresh'], ['herramientas', 'Herramientas', 'sliders'], ['crashes', 'Diagnóstico de crashes', 'alert'], ['limpieza', 'Limpieza', 'trash'], ['red', 'Red y ping', 'wifi'], ['arranque', 'Inicio de Windows', 'power'],
-  ['_', 'SEGURIDAD'], ['historial', 'Historial y deshacer', 'history'], ['_', 'APP'], ['ajustes', 'Ajustes y Discord', 'settings'],
+  ['inicio', 'Inicio', 'home'], ['modos', 'Modos', 'layers'],
+  ['_', 'OPTIMIZAR'], ['optimizacion', 'Ajustes', 'sliders'], ['pack', 'Pack Pro', 'flame'], ['juegos', 'Juegos', 'gamepad'], ['latencia', 'Ping e input lag', 'wifi'], ['audio', 'Audio', 'bolt'],
+  ['_', 'PC'], ['mipc', 'Mi PC y sistema', 'cpu'], ['historial', 'Historial y deshacer', 'history'], ['ajustes', 'Ajustes y Discord', 'settings'],
 ];
+// Pestañas: cada entrada del menú agrupa varias páginas
+const HUBS = {
+  juegos: [['juegos', 'Centro de juegos'], ['perfiles', 'Perfiles de juegos']],
+  latencia: [['latencia', 'Optimizar'], ['red', 'Medir y DNS']],
+  mipc: [['mipc', 'Mi PC'], ['limpieza', 'Limpieza'], ['arranque', 'Inicio de Windows'], ['procesos', 'Procesos'], ['dispositivos', 'Dispositivos'], ['launchers', 'Steam, Epic, Discord'], ['drivers', 'Drivers'], ['herramientas', 'Herramientas'], ['crashes', 'Crashes']],
+};
+const hubOf = (p) => Object.keys(HUBS).find((h) => HUBS[h].some((t) => t[0] === p)) || null;
+const tabBar = (p) => { const h = hubOf(p); return h ? `<div class="tabs">${HUBS[h].map(([id, l]) => `<button data-go="${id}" class="${id === p ? 'on' : ''}">${l}</button>`).join('')}</div>` : ''; };
 const S = { pq: '', pf: 'rec', page: 'inicio', info: null, desired: new Map(), cat: 'all', q: '', risk: 'all', only: 'all', busy: false, reboot: false, overlay: false, net: {}, cleanSel: new Set(), openMore: new Set(), game: null };
 const C = {}; // caché de datos entre pantallas (se pinta al instante y se refresca por detrás)
 let pollTimer = null;
@@ -56,7 +64,7 @@ function refreshBanner() {
   if (S.info && S.info.mock) return banner('Modo de prueba: los cambios son simulados y no tocan tu PC.');
   banner(S.reboot ? 'Algunos cambios necesitan <b>reiniciar Windows</b> para tener efecto completo.' : '');
 }
-function setPage(html) { const m = $('#main'), y = m.scrollTop; $('#page').innerHTML = html; m.scrollTop = y; }
+function setPage(html) { const m = $('#main'), y = m.scrollTop; $('#page').innerHTML = tabBar(S.page) + html; m.scrollTop = y; }
 const skeleton = (n = 6) => '<div style="padding-top:60px">' + '<div class="skel"></div>'.repeat(n) + '</div>';
 async function guard(btn, fn) {
   if (S.busy) return; S.busy = true;
@@ -96,13 +104,13 @@ const isLaptop = () => !!(S.info && S.info.facts && S.info.facts.laptop);
 
 // ───────── navegación ─────────
 function renderNav() {
-  $('#nav').innerHTML = NAV.map(([id, label, ico]) => id === '_' ? `<h6>${label}</h6>` : `<button data-p="${id}" class="${S.page === id ? 'on' : ''}">${I(ico, 18)}<span>${label}</span>${id === 'juegos' && S.game ? '<i class="dotbadge"></i>' : ''}</button>`).join('');
+  $('#nav').innerHTML = NAV.map(([id, label, ico]) => id === '_' ? `<h6>${label}</h6>` : `<button data-p="${id}" class="${S.page === id || hubOf(S.page) === id ? 'on' : ''}">${I(ico, 18)}<span>${label}</span>${id === 'juegos' && S.game ? '<i class="dotbadge"></i>' : ''}</button>`).join('');
 }
 $('#nav').addEventListener('click', (e) => { const b = e.target.closest('button'); if (b) go(b.dataset.p); });
 async function go(p) {
   if (!PAGES[p]) p = 'inicio';
   clearInterval(pollTimer); pollTimer = null;
-  S.page = p; renderNav(); $('#crumb').textContent = (NAV.find((n) => n[0] === p) || [])[1] || '';
+  S.page = p; renderNav(); $('#crumb').textContent = (NAV.find((n) => n[0] === (hubOf(p) || p)) || [])[1] || '';
   const pg = $('#page'); pg.classList.remove('enter'); void pg.offsetWidth; pg.classList.add('enter');
   $('#main').scrollTop = 0;
   try { await PAGES[p](); } catch (e) { setPage(`<h1>Algo falló</h1><p class="sub">${esc(e.message)}</p>`); }
@@ -130,7 +138,11 @@ async function pageInicio() {
       <div class="card"><div class="row"><div class="ico sm">${I('gamepad', 16)}</div><b class="sp">Juegos</b><button class="btn ghost" data-go="juegos">Abrir ${I('arrow', 14)}</button></div><div id="homeGame" class="muted" style="margin-top:10px">Buscando juegos abiertos…</div></div>
       <div class="card"><div class="row"><div class="ico sm">${I('layers', 16)}</div><b class="sp">Modo activo</b><button class="btn ghost" data-go="modos">Cambiar ${I('arrow', 14)}</button></div><div id="homeMode" class="muted" style="margin-top:10px">—</div></div>
     </div>
-    <div class="row wrap" style="margin-top:14px"><button class="btn" id="hBackup">${I('shield', 15)} Crear backup</button><button class="btn" data-go="historial">${I('layers', 15)} Historial de cambios</button><button class="btn" id="hRam">${I('ram', 15)} Liberar y optimizar apps</button><button class="btn danger" id="hUndo">${I('undo', 15)} Deshacer todo</button></div>
+    <div class="qa-grid">
+      <button class="qa" id="hRam"><span class="ico">${I('ram', 22)}</span><b>Liberar y optimizar apps</b><small>Recorta la RAM de Brave, Discord, Spotify… y les baja la prioridad</small></button>
+      <button class="qa" id="hBackup"><span class="ico">${I('shield', 22)}</span><b>Crear backup</b><small>Punto de restauración de Windows</small></button>
+      <button class="qa" data-go="historial"><span class="ico">${I('layers', 22)}</span><b>Historial de cambios</b><small>Qué se cambió y cómo deshacerlo</small></button>
+      <button class="qa danger" id="hUndo"><span class="ico">${I('undo', 22)}</span><b>Deshacer todo</b><small>Vuelve a los valores originales</small></button></div>
     <h2>Recomendaciones para tu PC</h2><div id="homeTips"><div class="skel" style="height:60px"></div></div>
     <h2>Accesos rápidos</h2>
     <div class="grid g4">${[['optimizacion', 'sliders', 'Optimización', 'Cientos de ajustes con el riesgo a la vista'], ['juegos', 'gamepad', 'Centro de juegos', 'Detecta y optimiza tus juegos + overlay'], ['limpieza', 'trash', 'Limpieza', 'Cachés, temporales y RAM'], ['red', 'wifi', 'Red y ping', 'Ping, DNS y regiones'], ['mipc', 'cpu', 'Mi PC', 'Tus componentes y su estado'], ['arranque', 'power', 'Inicio de Windows', 'Quita lo que frena el arranque'], ['historial', 'history', 'Historial', 'Deshaz cualquier cambio'], ['ajustes', 'discord', 'Discord', 'Muestra «Jugando a Sveqzz Optimizer»']].map(([p, i, t, d]) => `<button class="tile tilt" data-go="${p}"><div class="ico">${I(i, 18)}</div><b>${t}</b><span>${d}</span></button>`).join('')}</div>`);
@@ -301,7 +313,7 @@ async function pageLimpieza() {
     const total = list.filter((c) => S.cleanSel.has(c.id)).reduce((a, c) => a + c.size, 0);
     setPage(`<h1>Limpieza</h1><p class="sub">Mide cuánto ocupa cada cosa y borra solo lo que elijas. Nunca toca contraseñas, historial ni tus juegos.</p>
       <div class="row wrap" style="margin-bottom:6px"><div class="sp"><div class="eyebrow">PARA LIBERAR</div><div style="font-size:30px;font-weight:700">${fmtBytes(total)}</div></div><button class="btn" id="cScan">${I('refresh', 15)} Medir</button><button class="btn primary" id="cRun">${I('trash', 15)} Limpiar lo marcado</button></div>
-      <div class="row wrap" style="margin:12px 0 16px"><button class="btn" id="cBin">Vaciar papelera</button><button class="btn" id="cDns">Vaciar caché DNS</button><button class="btn" id="ramFree">${I('ram', 15)} Liberar RAM</button><button class="btn" id="cLarge">Archivos grandes</button></div>
+      <div class="row wrap" style="margin:12px 0 16px"><button class="btn" id="cBin">Vaciar papelera</button><button class="btn" id="cDns">Vaciar caché DNS</button><button class="btn" id="cLarge">Archivos grandes</button></div>
       ${list.map((c) => `<label class="item"><input type="checkbox" class="check" data-cl="${c.id}" ${S.cleanSel.has(c.id) ? 'checked' : ''}><div class="sp"><b>${esc(c.name)}</b><small>${esc(c.desc)}</small></div><span class="mono muted">${fmtBytes(c.size)} · ${c.files} archivos</span></label>`).join('')}<div id="largeBox"></div>`);
   };
   swr('clean', () => call('cleanScan'), draw);
@@ -415,6 +427,79 @@ async function runTest(btn) {
   try { await navigator.clipboard.writeText(txt); toast('Informe copiado al portapapeles', 'ok'); } catch { /* */ }
 }
 
+document.addEventListener('error', (e) => { if (e.target && e.target.tagName === 'IMG' && e.target.closest('.gimg')) e.target.remove(); }, true);
+// ───────── PERFILES DE JUEGOS ─────────
+const PRESET_LBL = { max: 'Máximo rendimiento', balanced: 'Equilibrado', off: 'Sin optimizar' };
+async function pagePerfiles() {
+  setPage('<h1>Perfiles de juegos</h1>' + skeleton(4));
+  const { catalog, chosen } = await call('profilesGet');
+  const card = (g) => { const k = g.exe.toLowerCase(), sel = (chosen[k] || {})._preset || '';
+    const img = g.steam ? `<img src="https://cdn.cloudflare.steamstatic.com/steam/apps/${g.steam}/header.jpg" alt="" loading="lazy">` : '';
+    return `<div class="gcard"><div class="gimg"><span>${esc(g.name.slice(0, 1))}</span>${img}</div><div class="gbody"><b>${esc(g.name)}</b><p class="small muted">${esc(g.tip)}</p>
+    <div class="seg">${['max', 'balanced', 'off'].map((p) => `<button data-gp="${esc(g.exe)}|${p}" class="${sel === p ? 'on' : ''}">${PRESET_LBL[p]}</button>`).join('')}</div></div></div>`; };
+  setPage(`<h1>Perfiles de juegos</h1><p class="sub">Cada juego tiene su propio perfil, como los modos pero por juego. Cuando abres el juego, la app aplica su perfil: prioridad de CPU, GPU dedicada, pantalla completa exclusiva (sin la optimización de ventana), RAM y cierre de apps de fondo. Si no eliges nada, usa tus opciones generales del Centro de juegos.</p>
+  <div class="gcards">${catalog.map(card).join('')}</div><p class="muted small" style="margin-top:12px">¿Tu juego no está? Agrégalo en «Centro de juegos» → Perfiles de juego (elige su .exe).</p>`);
+}
+
+// ───────── PING E INPUT LAG ─────────
+async function pageLatencia() {
+  const b = await call('benchGet').catch(() => ({}));
+  setPage(`<h1>Ping e input lag</h1><p class="sub">Dos botones que aplican todo lo que sirve de verdad para cada caso, con punto de restauración antes. Para medir y elegir DNS usa la pestaña «Medir y DNS».</p>
+  <div class="grid g2">
+    <div class="card"><div class="row"><div class="ico">${I('wifi', 20)}</div><div class="sp"><b>Optimizar ping</b></div></div>
+      <p class="small muted" style="line-height:1.6">Desactiva el algoritmo de Nagle, la limitación de red multimedia y el ahorro de energía de la tarjeta, ajusta TCP, elige solo el DNS más rápido y vacía su caché. Mide tu ping antes y después.</p>
+      <button class="btn primary big" id="lPing" style="width:100%">${I('bolt', 18)} Optimizar ping</button><div id="lPingOut" class="small" style="margin-top:10px"></div></div>
+    <div class="card"><div class="row"><div class="ico">${I('gamepad', 20)}</div><div class="sp"><b>Optimizar input lag</b></div></div>
+      <p class="small muted" style="line-height:1.6">Ratón sin aceleración y con cola mínima, teclado rápido, temporizador del sistema afinado, prioridad de juegos en MMCSS, sin captura de pantalla en segundo plano y USB sin suspensión.</p>
+      <button class="btn primary big" id="lInput" style="width:100%">${I('bolt', 18)} Optimizar input lag</button><div id="lInOut" class="small" style="margin-top:10px"></div></div>
+  </div>
+  <div class="card" style="margin-top:14px"><div class="row wrap"><div class="sp"><b>Medir el retraso del sistema</b><div class="small muted">Mide la precisión del temporizador (relacionada con el input lag). Mide antes, aplica, reinicia y mide después.</div></div><button class="btn" id="bBefore">Medir (antes)</button><button class="btn primary" id="bAfter">Medir (después)</button><button class="btn" data-go="dispositivos">Prioridad de mandos y teclado</button></div><div id="benchOut" style="margin-top:12px">${benchHtml(b)}</div></div>`);
+}
+
+// ───────── AUDIO ─────────
+async function pageAudio() {
+  setPage('<h1>Audio</h1>' + skeleton(3));
+  const a = await call('audioState');
+  const lvl = (id, t, d) => `<button class="opt ${a.active === id ? 'on' : ''}" data-aud="${id}"><b>${t}</b><small>${d}</small></button>`;
+  setPage(`<h1>Audio para shooters</h1><p class="sub">Perfil de ecualizador propio de Sveqzz que baja los graves (explosiones y disparos) y sube los pasos, recarga y detalles. Funciona con Equalizer APO, un programa gratuito y de código abierto.</p>
+  <div class="card"><div class="row wrap"><div class="ico">${I('bolt', 20)}</div><div class="sp"><b>Equalizer APO ${a.apo ? '<span class="pill on">Instalado</span>' : '<span class="pill bad">No instalado</span>'}</b><div class="small muted">${a.apo ? 'Elige un perfil. Si no oyes cambios, abre «Configurator» de Equalizer APO y marca tus auriculares.' : 'Instálalo, reinicia el PC, y en su «Configurator» marca tus auriculares. Luego vuelve aquí.'}</div></div>${a.apo ? '' : `<button class="btn primary big" data-open="https://sourceforge.net/projects/equalizerapo/">${I('download', 16)} Descargar Equalizer APO</button>`}</div>
+  ${a.apo ? `<div class="opts" style="margin-top:14px">${lvl('suave', 'Pasos claros · suave', 'Graves −4 dB, pasos +3,5 dB. Natural, sirve para todo.')}${lvl('fuerte', 'Pasos claros · fuerte', 'Disparos mucho más bajos, pasos +5,5 dB. Para ranked.')}${lvl('off', 'Sin perfil', 'Quita el perfil de Sveqzz.')}</div>` : ''}</div>
+  <div class="grid g2" style="margin-top:14px">
+    <div class="card"><b>Tus dispositivos de audio</b>${(a.devices || []).map((d) => `<div class="item"><div class="sp"><b>${esc(d.Name)}</b><small class="mono">${esc(d.Manufacturer || '')} · ${esc(d.Status || '')}</small></div></div>`).join('') || '<div class="muted small">No pude leerlos.</div>'}
+      <div class="row wrap" style="margin-top:12px"><button class="btn big" id="audRestart">${I('refresh', 16)} Arreglar audio (reiniciar servicio)</button><button class="btn big" data-go="drivers">Actualizar drivers</button></div></div>
+    <div class="card"><b>Ajustes dentro del juego (Warzone y shooters)</b><ul class="small muted" style="line-height:1.8;padding-left:18px"><li>Mezcla de audio: «Auriculares» o «Auriculares con graves reforzados» NO; prueba «Auriculares».</li><li>Volumen de música y de efectos de sonido bajos, voces al 100 %.</li><li>Desactiva el sonido espacial 7.1 virtual de Windows y usa estéreo.</li><li>Rango dinámico: «Alto» o «Muy alto» para oír pasos lejanos.</li></ul></div>
+  </div>`);
+}
+
+// ───────── PACK PRO ─────────
+const PACK_STEPS = [
+  ['rp', 'Punto de restauración', async () => { await call('restorePoint'); }],
+  ['bench0', 'Medición inicial', async () => { await call('benchRun', 'before'); }],
+  ['mode', 'Ajustes del sistema (modo según tu PC)', async () => { await call('modesActivate', isLaptop() ? 'laptop' : 'competitivo'); }],
+  ['ping', 'Optimizar ping', async () => { await call('latencyOptimize', 'ping'); }],
+  ['input', 'Optimizar input lag', async () => { await call('latencyOptimize', 'input'); }],
+  ['ram', 'Liberar y optimizar apps', async () => { await call('appsOptimize'); }],
+  ['drv', 'Revisar drivers', async () => { const r = await call('driversScan'); return r.old ? `${r.old} driver(s) por actualizar (pestaña Drivers)` : 'Todos al día'; }],
+];
+async function pagePack() {
+  const manual = [['Formateo y Windows personalizado', 'No lo hace una app: se hace con un USB. Úsalo solo si quieres empezar de cero.'], ['Overclock / undervolt', 'Depende de tu hardware y se hace en la BIOS o en MSI Afterburner / Ryzen Master.'], ['Tiempos de RAM (DRAM)', 'Se hacen en la BIOS (activa XMP/EXPO como mínimo).'], ['Actualizar BIOS', 'Solo desde la web del fabricante de tu placa: es riesgoso, hazlo solo si lo necesitas.'], ['Panel de NVIDIA / AMD', 'NVIDIA: Baja latencia = Activado, Administración de energía = Máximo rendimiento, V-Sync = Desactivado, Caché de sombras = Ilimitado. AMD: Anti-Lag = ON, Radeon Chill = OFF.']];
+  setPage(`<h1>Pack Pro</h1><p class="sub">Un solo botón que hace todo lo que una app puede hacer por ti: backup, ajustes del sistema, ping, input lag, apps de fondo y revisión de drivers. Al terminar, reinicia el PC.</p>
+  <div class="card"><div class="row wrap"><div class="ico">${I('flame', 22)}</div><div class="sp"><b>Optimización completa${isLaptop() ? ' (portátil: solo ajustes seguros)' : ''}</b><div class="small muted">Tarda unos minutos. No cierres la app. Cada paso crea su punto de restauración.</div></div><button class="btn primary big" id="packGo">${I('bolt', 18)} Aplicar Pack Pro</button></div>
+  <div id="packList" style="margin-top:14px">${PACK_STEPS.map(([id, l]) => `<div class="item" id="ps-${id}"><span class="dot"></span><div class="sp"><b>${l}</b><small class="mono"></small></div></div>`).join('')}</div></div>
+  <h2>Lo que no puede hacer una app (te digo cómo)</h2><div class="card">${manual.map(([t, d]) => `<div class="item"><div class="ico sm">${I('info', 15)}</div><div class="sp"><b>${t}</b><small>${esc(d)}</small></div></div>`).join('')}</div>`);
+}
+async function runPack(btn) {
+  for (const [id, , fn] of PACK_STEPS) {
+    if (S.page !== 'pack') return;
+    const row = $('#ps-' + id); if (!row) return; row.className = 'item run'; row.querySelector('.dot').className = 'dot warn';
+    try { const note = await fn(); row.querySelector('.dot').className = 'dot on'; if (note) row.querySelector('small').textContent = note; }
+    catch (e) { row.querySelector('.dot').className = 'dot bad'; row.querySelector('small').textContent = String(e.message || e).slice(0, 120); }
+    row.className = 'item';
+  }
+  delete C.tw; delete C.modes; try { await call('benchRun', 'after'); } catch { /* */ }
+  toast('Pack Pro aplicado. Reinicia el PC.', 'ok'); S.reboot = true; refreshBanner();
+}
+
 // ───────── DIAGNÓSTICO DE CRASHES ─────────
 async function pageCrashes() {
   setPage('<h1>Diagnóstico de crashes</h1><p class="sub">Leyendo el visor de eventos de Windows (puede tardar unos segundos)…</p>' + skeleton(3));
@@ -452,7 +537,7 @@ async function pageAjustes() {
     <div class="sett"><div class="sp"><b>Sveqzz Optimizer 2.0</b><small>Hecho por Sveqzz. Los ajustes se guardan en tu PC, no se envía nada a internet salvo lo que tú pidas (medidor de FPS, ping, Discord local).</small></div></div></div>`);
 }
 
-const PAGES = { herramientas: pageTools, drivers: pageDrivers, crashes: pageCrashes, procesos: pageProcesos, dispositivos: pageDispositivos, launchers: pageLaunchers, inicio: pageInicio, mipc: pageMiPc, modos: pageModos, optimizacion: pageOptim, juegos: pageJuegos, limpieza: pageLimpieza, red: pageRed, arranque: pageArranque, historial: pageHist, ajustes: pageAjustes };
+const PAGES = { perfiles: pagePerfiles, latencia: pageLatencia, audio: pageAudio, pack: pagePack, herramientas: pageTools, drivers: pageDrivers, crashes: pageCrashes, procesos: pageProcesos, dispositivos: pageDispositivos, launchers: pageLaunchers, inicio: pageInicio, mipc: pageMiPc, modos: pageModos, optimizacion: pageOptim, juegos: pageJuegos, limpieza: pageLimpieza, red: pageRed, arranque: pageArranque, historial: pageHist, ajustes: pageAjustes };
 
 // ───────── eventos de la interfaz ─────────
 document.addEventListener('click', async (e) => {
@@ -460,6 +545,8 @@ document.addEventListener('click', async (e) => {
   const d = t.dataset;
   if (d.go) return go(d.go);
   if (d.open) return cmd('open', d.open);
+  if (d.aud) return guard(null, async () => { await call('audioProfile', d.aud); toast(d.aud === 'off' ? 'Perfil quitado' : 'Perfil aplicado. Reinicia el audio si no lo oyes.', 'ok'); pageAudio(); });
+  if (d.gp) { const [exe, pr] = d.gp.split('|'); await call('profileSet', exe, pr); return pagePerfiles(); }
   if (d.mode) return activateMode(t, d.mode);
   if (d.cat) { S.cat = d.cat; drawCats(); return drawList(); }
   if (d.more) { S.openMore.has(d.more) ? S.openMore.delete(d.more) : S.openMore.add(d.more); return drawList(); }
@@ -470,6 +557,9 @@ document.addEventListener('click', async (e) => {
     case 'bBefore': case 'bAfter': return guard(t, async () => { toast('Midiendo… no uses el PC unos segundos', 'ok'); const b = await call('benchRun', t.id === 'bAfter' ? 'after' : 'before'); $('#benchOut').innerHTML = benchHtml(b); });
     case 'tRemove': { const ids = [...document.querySelectorAll('.appchk:checked')].map((x) => x.value); if (!ids.length) return toast('Marca alguna app', 'warn'); if (!window.confirm('¿Quitar ' + ids.length + ' app(s)?')) return; return guard(t, async () => { const r = await call('toolsRemoveApps', ids); toast(`${r.done.length} quitadas${r.failed.length ? ', ' + r.failed.length + ' con error' : ''}`, r.failed.length ? 'warn' : 'ok'); pageTools(); }); }
     case 'tTest': if (!window.confirm('Se aplicarán y revertirán ajustes uno a uno. Cierra tus juegos. ¿Continuar?')) return; return guard(t, () => runTest(t));
+    case 'lPing': case 'lInput': return guard(t, async () => { const r = await call('latencyOptimize', t.id === 'lPing' ? 'ping' : 'input'); delete C.tw; const o = $(t.id === 'lPing' ? '#lPingOut' : '#lInOut'); const txt = `${r.count} ajustes aplicados.` + (r.before != null ? ` Ping: ${r.before.toFixed(0)} → ${r.after != null ? r.after.toFixed(0) : '–'} ms.` : '') + (r.dns ? ` DNS cambiado a ${r.dns}.` : '') + ' Reinicia para terminar.'; if (o) o.textContent = txt; toast(txt, 'ok'); S.reboot = true; refreshBanner(); });
+    case 'audRestart': return guard(t, async () => { const r = await call('audioRestart'); toast(r.ok ? 'Servicio de audio reiniciado' : 'No se pudo reiniciar', r.ok ? 'ok' : 'err'); });
+    case 'packGo': if (!window.confirm('Se aplicarán ajustes del sistema, ping, input lag y se liberará RAM. Se crea un punto de restauración antes. ¿Continuar?')) return; return guard(t, () => runPack(t));
     case 'oneClick': return guard(t, async () => { const r = await call('optimizeRecommended'); delete C.tw; afterApply(r, r.count ? `${r.count} ajuste(s) aplicados` : 'Ya estaba todo optimizado'); pageInicio(); });
     case 'selRec': C.tw.v.tweaks.filter((x) => x.rec && x.status !== 'na').forEach((x) => S.desired.set(x.id, true)); drawList(); return drawBar();
     case 'selSafe': C.tw.v.tweaks.filter((x) => x.risk === 'safe' && x.status !== 'na' && !x.warn).forEach((x) => S.desired.set(x.id, true)); drawList(); return drawBar();

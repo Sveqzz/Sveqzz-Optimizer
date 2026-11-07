@@ -1,6 +1,6 @@
 {
   "name": "sveqzz-optimizer",
-  "version": "2.0.0",
+  "version": "2.2.0",
   "description": "Sveqzz Optimizer - optimizador de PC para Windows",
   "author": "Sveqzz",
   "main": "main.js",
@@ -8,7 +8,8 @@
     "start": "electron .",
     "dev": "node dev-server.js",
     "test": "node test/engine.test.js",
-    "dist": "electron-builder --win portable --x64 && node scripts/patch-manifest.js"
+    "dist": "electron-builder --win portable --x64 && node scripts/patch-manifest.js",
+    "dist:setup": "electron-builder --win nsis --x64"
   },
   "devDependencies": {
     "electron": "33.4.11",
@@ -45,6 +46,7 @@
       "artifactName": "Sveqzz-Optimizer.${ext}",
       "requestedExecutionLevel": "requireAdministrator"
     },
+    "nsis": { "oneClick": false, "perMachine": true, "allowToChangeInstallationDirectory": true, "artifactName": "Sveqzz-Optimizer-Setup.exe", "createDesktopShortcut": true },
     "portable": {
       "artifactName": "Sveqzz-Optimizer.exe"
     }

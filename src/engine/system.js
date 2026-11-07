@@ -17,19 +17,22 @@ function cpuUsage() {
 }
 
 let nvidia, gpuCache = null, gpuAt = 0, gpuBusy = false;
-async function gpuInfo() {
-  if (nvidia === false) return null;
-  if (Date.now() - gpuAt > 3000 && !gpuBusy) {
-    gpuBusy = true;
-    run('nvidia-smi', ['--query-gpu=utilization.gpu,temperature.gpu,memory.used,memory.total,power.draw', '--format=csv,noheader,nounits'], 4000).then((r) => {
-      if (r.code !== 0) { nvidia = false; gpuCache = null; return; }
-      nvidia = true;
-      const [u, t, mu, mt, pw] = r.stdout.trim().split(/\r?\n/)[0].split(/\s*,\s*/).map(Number);
-      gpuCache = { usage: u, temp: t, vramUsed: mu, vramTotal: mt, power: pw };
-    }).finally(() => { gpuBusy = false; gpuAt = Date.now(); });
-  }
-  return gpuCache;
+let smiProc = null;
+function startSmi() {
+  if (smiProc || nvidia === false) return;
+  const { spawn } = require('child_process');
+  try {
+    const c = spawn('nvidia-smi', ['--query-gpu=utilization.gpu,temperature.gpu,memory.used,memory.total,power.draw', '--format=csv,noheader,nounits', '-l', '3'], { windowsHide: true });
+    smiProc = c; let buf = '';
+    c.stdout.on('data', (d) => { buf += d; let i; while ((i = buf.indexOf('\n')) >= 0) { const line = buf.slice(0, i).trim(); buf = buf.slice(i + 1); const [u, t, mu, mt, pw] = line.split(/\s*,\s*/).map(Number); if (!Number.isNaN(u)) { nvidia = true; gpuCache = { usage: u, temp: t, vramUsed: mu, vramTotal: mt, power: pw }; } } });
+    c.on('error', () => { nvidia = false; gpuCache = null; smiProc = null; });
+    c.on('close', () => { smiProc = null; if (nvidia === undefined) nvidia = false; });
+    if (c.unref) c.unref();
+  } catch { nvidia = false; }
 }
+// Un solo proceso nvidia-smi que emite cada 3 s (antes se lanzaba uno nuevo cada vez: lento con antivirus)
+async function gpuInfo() { startSmi(); return nvidia === false ? null : gpuCache; }
+process.on('exit', () => { try { if (smiProc) smiProc.kill(); } catch { /* */ } });
 
 let lastPing = { ms: null, jitter: null, at: 0 }, pinging = false, prevPing = null;
 function refreshPing() {

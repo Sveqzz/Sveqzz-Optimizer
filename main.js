@@ -67,6 +67,13 @@ function hideOverlay() {
 const overlayOpen = () => !!(overlay && !overlay.isDestroyed());
 function toggleOverlay() { overlayManual = !overlayOpen(); overlayOpen() ? hideOverlay() : showOverlay(); }
 
+// ───────── registro de errores (para diagnosticar cierres en otros PCs) ─────────
+const logFile = () => path.join(app.getPath('userData'), 'sveqzz-log.txt');
+function logErr(tag, e) { try { require('fs').appendFileSync(logFile(), `[${new Date().toISOString()}] ${tag}: ${(e && e.stack) || e}\n`); } catch { /* */ } }
+process.on('uncaughtException', (e) => logErr('uncaughtException', e));
+process.on('unhandledRejection', (e) => logErr('unhandledRejection', e));
+app.on('render-process-gone', (_e, _w, d) => logErr('render-process-gone', JSON.stringify(d)));
+app.on('child-process-gone', (_e, d) => logErr('child-process-gone', JSON.stringify(d)));
 // ───────── arranque ─────────
 const elevated = ensureAdmin();
 if (!elevated || !app.requestSingleInstanceLock()) app.quit();
@@ -82,18 +89,20 @@ app.whenReady().then(() => {
   });
   ipcMain.handle('cmd', async (_e, name, arg) => {
     switch (name) {
+      case 'logPath': return logFile();
       case 'overlay:toggle': toggleOverlay(); return overlayOpen();
       case 'overlay:state': return overlayOpen();
       case 'overlay:corner': if (overlayOpen()) overlay.setBounds(overlayPos(String(arg))); return true;
       case 'pickExe': { const r = await dialog.showOpenDialog(win, { title: 'Elige el .exe del juego', properties: ['openFile'], filters: [{ name: 'Programas', extensions: ['exe'] }] }); return r.canceled ? null : r.filePaths[0]; }
-      case 'open': if (/^https:\/\/(discord\.com|github\.com|www\.nvidia\.com|www\.amd\.com|www\.intel\.com|www\.realtek\.com|support\.microsoft\.com)\//.test(String(arg))) shell.openExternal(String(arg)); return true;
+      case 'open': if (/^https:\/\/(discord\.com|github\.com|sourceforge\.net|www\.nvidia\.com|www\.nvidia\.com|www\.amd\.com|www\.intel\.com|www\.realtek\.com|support\.microsoft\.com)\//.test(String(arg))) shell.openExternal(String(arg)); return true;
       default: return false;
     }
   });
 
   engine.events.on('game-start', (g) => {
     send(win, 'ev', 'game-start', g);
-    if (engine.state.data.settings.overlayAuto && overlayManual !== false) showOverlay();
+    const st = engine.state.data.settings, sens = require('./src/engine/games').SENSITIVE.has(String(g.exe || '').toLowerCase());
+    if (st.overlayAuto && overlayManual !== false && (!sens || st.overlayAlways)) showOverlay();
   });
   engine.events.on('game-end', (g) => {
     send(win, 'ev', 'game-end', g);

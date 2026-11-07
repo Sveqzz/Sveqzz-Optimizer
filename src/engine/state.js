@@ -8,7 +8,7 @@ class State {
     fs.mkdirSync(dir, { recursive: true });
     this.data = {
       tweaks: {}, activeMode: 'normal', modeApplied: [], history: [], blocks: [], procDisabled: {}, devPrio: {}, dnsPrev: null, profiles: [], gamePrefs: {},
-      settings: { autoDetect: true, autoOptimize: true, overlayAuto: true, overlayCorner: 'tl', discordEnabled: true, discordClientId: '', discordImage: '', fx3d: true,
+      settings: { autoDetect: true, autoOptimize: true, overlayAuto: true, overlayAlways: false, overlayCorner: 'tl', discordEnabled: true, discordClientId: '', discordImage: '', fx3d: true,
         gameOpts: { priority: true, gpuHigh: true, fso: false, persist: false, ram: true, bgLow: true, killBg: true, standby: true } },
     };
     try {

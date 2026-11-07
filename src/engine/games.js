@@ -166,4 +166,38 @@ $b.Keys | ForEach-Object { '{0}:{1}:{2}' -f $_, [math]::Round($b[$_]/1MB), [math
   return { apps, totalMB: apps.reduce((t, a) => t + Math.max(0, a.before - a.after), 0) };
 }
 
-module.exports = { optimizeApps, purgeStandby, killBg, lowerBg, restoreBg, KNOWN, running, scanByPath, optimize, undoPrefs, freeRam };
+// Juegos donde un overlay encima rompe la pantalla completa exclusiva (pasan a «pantalla completa extendida» y bajan los FPS)
+const SENSITIVE = new Set(['cod.exe', 'valorant-win64-shipping.exe', 'cs2.exe', 'csgo.exe', 'r5apex.exe', 'r5apex_dx12.exe', 'rainbowsix.exe', 'rainbowsix_vulkan.exe', 'escapefromtarkov.exe', 'tslgame.exe', 'bf2042.exe', 'bf6.exe', 'fortniteclient-win64-shipping.exe', 'overwatch.exe', 'thefinals.exe', 'marvel-win64-shipping.exe', 'deadlock.exe', 'destiny2.exe']);
+
+
+// Catálogo para la página de perfiles: foto (Steam CDN, si existe) y consejos dentro del juego.
+const CATALOG = [
+  { exe: 'cod.exe', name: 'Call of Duty / Warzone', steam: 1938090, tip: 'Pantalla completa exclusiva, DirectX 12, sombras/partículas bajas, Nvidia Reflex ON. Cierra el overlay de FPS (esta app lo oculta sola).' },
+  { exe: 'fortniteclient-win64-shipping.exe', name: 'Fortnite', tip: 'Modo Rendimiento (DX11), resolución 3D 100 %, sombras y efectos en bajo. Usa también el perfil de la pestaña Centro de juegos.' },
+  { exe: 'valorant-win64-shipping.exe', name: 'VALORANT', tip: 'Limita FPS a ilimitado, Multithreaded Rendering ON, Nvidia Reflex ON, calidad de material/detalle en bajo.' },
+  { exe: 'cs2.exe', name: 'Counter-Strike 2', steam: 730, tip: 'Opciones de lanzamiento: -novid -high. Reflex ON, sombras bajas, MSAA 2x/4x.' },
+  { exe: 'r5apex.exe', name: 'Apex Legends', steam: 1172470, tip: 'Sin límite de FPS (fps_max unlimited), texturas según tu VRAM, modelo de sombras y efectos bajos.' },
+  { exe: 'robloxplayerbeta.exe', name: 'Roblox', tip: 'Calidad gráfica manual al mínimo y límite de FPS ilimitado en la configuración de Roblox.' },
+  { exe: 'rainbowsix.exe', name: 'Rainbow Six Siege', steam: 359550, tip: 'Vulkan en equipos modestos, sin V-Sync, calidad de textura según VRAM.' },
+  { exe: 'overwatch.exe', name: 'Overwatch 2', steam: 2357570, tip: 'Reduce buffering ON, calidad de sombras/efectos baja, Nvidia Reflex ON.' },
+  { exe: 'marvel-win64-shipping.exe', name: 'Marvel Rivals', steam: 2767030, tip: 'Modo de render DX12 o DX11 según el equipo, DLSS/FSR en calidad, sombras y efectos bajos.' },
+  { exe: 'thefinals.exe', name: 'THE FINALS', steam: 2073850, tip: 'Reflex ON, sombras/GI bajas, DLSS/FSR en calidad.' },
+  { exe: 'gta5.exe', name: 'GTA V', steam: 271590, tip: 'DirectX 11, sin MSAA, sombras suaves y distancia de dibujado media.' },
+  { exe: 'rocketleague.exe', name: 'Rocket League', steam: 252950, tip: 'Rendimiento en High Performance, sin V-Sync, efectos en bajo.' },
+  { exe: 'eldenring.exe', name: 'Elden Ring', steam: 1245620, tip: 'Calidad de sombras y efectos en media/baja, sin anti-aliasing extra.' },
+  { exe: 'cyberpunk2077.exe', name: 'Cyberpunk 2077', steam: 1091500, tip: 'DLSS/FSR en calidad, trazado de rayos solo si tu GPU lo aguanta.' },
+  { exe: 'tslgame.exe', name: 'PUBG', steam: 578080, tip: 'Sin V-Sync, sombras y efectos en bajo, anti-aliasing medio.' },
+  { exe: 'rustclient.exe', name: 'Rust', steam: 252490, tip: 'Reduce la distancia de dibujado y la calidad de sombras.' },
+  { exe: 'dota2.exe', name: 'Dota 2', steam: 570, tip: 'Opción de lanzamiento -high; sombras bajas.' },
+  { exe: 'league of legends.exe', name: 'League of Legends', tip: 'Calidad de sombras y efectos en bajo, límite de FPS según el monitor.' },
+  { exe: 'minecraft.windows.exe', name: 'Minecraft', tip: 'Distancia de renderizado 8-12, con Sodium/OptiFine en Java.' },
+  { exe: 'escapefromtarkov.exe', name: 'Escape from Tarkov', tip: 'Sombras y calidad de objetos en bajo, ideal con SSD.' },
+];
+// Perfil por juego: lo que hace Sveqzz Optimizer al detectarlo.
+const PRESET = {
+  max: { priority: 'high', gpuHigh: true, fso: true, ram: true, bgLow: true, killBg: true, standby: true },
+  balanced: { priority: false, gpuHigh: true, fso: false, ram: true, bgLow: true, killBg: false, standby: true },
+  off: { priority: '', gpuHigh: false, fso: false, ram: false, bgLow: false, killBg: false, standby: false },
+};
+
+module.exports = { CATALOG, PRESET, SENSITIVE, optimizeApps, purgeStandby, killBg, lowerBg, restoreBg, KNOWN, running, scanByPath, optimize, undoPrefs, freeRam };

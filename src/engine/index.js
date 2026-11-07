@@ -16,6 +16,7 @@ const crashes = require('./crashes');
 const fortnite = require('./fortnite');
 const { FpsMeter } = require('./fps');
 const { DiscordRPC } = require('./discord');
+const audio = require('./audio');
 const DISCORD_APP_ID = '1566908340724834494'; // fijo: no se puede cambiar desde la app
 const DISCORD_IMAGE = 'logo';
 
@@ -27,7 +28,7 @@ function create(dataDir, opts = {}) {
   const events = new EventEmitter();
   const fps = new FpsMeter(dataDir);
   const discord = new DiscordRPC();
-  let hw = null, facts = null, restoreDone = false, busy = Promise.resolve(), listCache = null, hwView = null, fpsError = '';
+  let hw = null, facts = null, lastRP = 0, busy = Promise.resolve(), listCache = null, hwView = null, fpsError = '';
   const sessions = new Map(); // pid -> sesión de juego
   const hwReady = be.hwScan().then((h) => { hw = h; facts = system.factsFrom(h); }).catch(() => {});
   // Todas las escrituras van en cola: nunca dos cambios a la vez.
@@ -37,11 +38,14 @@ function create(dataDir, opts = {}) {
   async function requireAdmin() {
     if (!(await be.isAdmin())) throw new Error(`${APP} necesita ejecutarse como administrador para cambiar estos ajustes.`);
   }
-  async function restorePoint() {
+  async function restorePoint(desc) {
     if (be.mock) return { ok: true, mock: true };
-    const r = await be.ps(`Enable-ComputerRestore -Drive "$env:SystemDrive\\" -ErrorAction SilentlyContinue; Checkpoint-Computer -Description "${APP}" -RestorePointType MODIFY_SETTINGS -ErrorAction Stop`, 120000);
-    const ok = r.code === 0;
-    state.log('sistema', ok ? 'Punto de restauración creado' : 'No se pudo crear punto de restauración (Windows limita uno cada 24 h)');
+    const name = String(desc || APP).replace(/[^\w .áéíóúñÁÉÍÓÚÑ-]/g, '').slice(0, 60);
+    // Windows solo deja crear 1 punto cada 24 h: se pone la frecuencia a 0 solo durante este comando y se deja como estaba.
+    const key = 'HKLM:\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\SystemRestore';
+    const r = await be.ps(`$ErrorActionPreference='Stop'; Enable-ComputerRestore -Drive "$env:SystemDrive\\" -ErrorAction SilentlyContinue; $k='${key}'; $old=(Get-ItemProperty $k -Name SystemRestorePointCreationFrequency -ErrorAction SilentlyContinue).SystemRestorePointCreationFrequency; Set-ItemProperty $k -Name SystemRestorePointCreationFrequency -Value 0 -Type DWord; try { Checkpoint-Computer -Description "${APP}: ${name}" -RestorePointType MODIFY_SETTINGS } finally { if ($null -eq $old) { Remove-ItemProperty $k -Name SystemRestorePointCreationFrequency -ErrorAction SilentlyContinue } else { Set-ItemProperty $k -Name SystemRestorePointCreationFrequency -Value $old -Type DWord } }`, 180000);
+    const ok = r.code === 0; lastRP = Date.now();
+    state.log('sistema', ok ? `Punto de restauración creado: ${name}` : 'No se pudo crear el punto de restauración (¿protección del sistema desactivada?)');
     return { ok };
   }
   const summarize = (results, ids) => {
@@ -57,7 +61,7 @@ function create(dataDir, opts = {}) {
     list = chosen;
     const clash = [...new Set(list.flatMap((t) => [...tw.conflictsOf(t.id)]))].filter((id) => state.data.tweaks[id] && !list.some((t) => t.id === id));
     if (clash.length) await tw.revertMany(be, state, clash.map((i) => tw.byId.get(i)));
-    if (list.length > 3 && !restoreDone) { restoreDone = true; await restorePoint(); }
+    if (list.length >= 2 || Date.now() - lastRP > 600000) await restorePoint(label || (list.length === 1 ? list[0].name : `${list.length} ajustes`));
     const before = new Set(Object.keys(state.data.tweaks));
     const results = await tw.applyMany(be, state, list);
     const fresh = list.filter((t) => !before.has(t.id) && state.data.tweaks[t.id]).map((t) => t.id);
@@ -127,7 +131,8 @@ function create(dataDir, opts = {}) {
   async function optimizeSession(s) {
     s.status = 'optimizando';
     const mode = state.data.activeMode, comp = ['competitivo', 'ultimate', 'extremo'].includes(mode);
-    const o = { ...S().gameOpts }; if (comp) o.fso = o.fso || true;
+    const gp = (state.data.gameProfiles || {})[String(s.exe || '').toLowerCase()];
+    const o = { ...S().gameOpts, ...(gp || {}) }; if (comp) o.fso = o.fso || true;
     if (facts && !facts.laptop) o.gpuHigh = o.gpuHigh && (facts.nvidia || facts.amd) && (facts.intel || (hw && hw.gpus && hw.gpus.length > 1));
     try { const r = await games.optimize(be, state, s, o); if (o.bgLow) { s.bgPrev = await games.lowerBg(be).catch(() => []); r.applied.push('Launchers y apps de fondo con menos prioridad'); } s.applied = r.applied; s.status = 'optimizado'; state.log('juego', `${s.name} optimizado: ${r.applied.join(', ')}`); }
     catch (e) { s.status = 'error'; s.error = String(e.message || e); }
@@ -214,6 +219,26 @@ function create(dataDir, opts = {}) {
     devicesBoost: (id) => exclusive(async () => { await requireAdmin(); return devices.boost(be, state, String(id)); }),
     devicesRestore: (id) => exclusive(async () => { await requireAdmin(); await devices.restore(be, state, String(id)); return { ok: true }; }),
     // diagnóstico de crashes y perfil de Fortnite
+    // ───── perfiles por juego, latencia y audio ─────
+    async profilesGet() { return { catalog: games.CATALOG, chosen: state.data.gameProfiles || {} }; },
+    profileSet: (exe, preset) => { const k = String(exe).toLowerCase(); state.data.gameProfiles = state.data.gameProfiles || {}; if (!games.PRESET[preset]) delete state.data.gameProfiles[k]; else state.data.gameProfiles[k] = { ...games.PRESET[preset], _preset: preset }; state.save(); return state.data.gameProfiles; },
+    latencyOptimize: (kind) => exclusive(async () => {
+      const isPing = kind === 'ping';
+      const test = isPing ? (t) => t.cat === 'red' && t.risk !== 'advanced' : (t) => (t.cat === 'input' && t.risk !== 'advanced') || /mmcss|cpu-scheduling|timer-resolution|gamedvr|game-mode|power-throttling|hook-timeout|usb-suspend|hid/.test(t.id);
+      const ids = modeTweakIds({ test }, facts);
+      const out = { kind, count: ids.length };
+      if (isPing) {
+        const b = await network.measure('cloudflare', 8); out.before = b.avg;
+        try { const bench = await network.dnsBench(); const cur = bench.find((x) => x.id === 'current'); const best = bench.filter((x) => x.id !== 'current' && x.ms != null).sort((a, c) => a.ms - c.ms)[0]; if (best && (!cur || cur.ms == null || best.ms < cur.ms * 0.85)) { await requireAdmin(); await network.setDns(be, state, best.id); out.dns = best.name; } } catch { /* DNS opcional */ }
+        await be.exec('ipconfig', ['/flushdns']).catch(() => {});
+      }
+      out.result = ids.length ? await doApply(ids, isPing ? 'Optimización de ping' : 'Optimización de input lag') : null;
+      if (isPing) { const a = await network.measure('cloudflare', 8); out.after = a.avg; }
+      return out;
+    }),
+    audioState: () => audio.state(be),
+    audioProfile: (level) => { const r = audio.setProfile(String(level)); state.log('audio', `Perfil de audio: ${level}`); return r; },
+    audioRestart: () => audio.restartAudio(be),
     toolsApps: () => require('./tools').scanApps(be),
     toolsRemoveApps: (ids) => exclusive(async () => { await requireAdmin(); return require('./tools').removeApps(be, state, ids); }),
     async benchRun(kind) { const r = await require('./tools').bench(); state.data.bench = state.data.bench || {}; state.data.bench[kind === 'after' ? 'after' : 'before'] = r; state.save(); return state.data.bench; },
@@ -279,7 +304,7 @@ function create(dataDir, opts = {}) {
     // ajustes
     async settingsGet() { return { ...S(), discordClientId: undefined, discordImage: undefined, discord: discord.status }; },
     settingsSet: (patch) => {
-      const cur = S(); const allowed = ['autoDetect', 'autoOptimize', 'overlayAuto', 'overlayCorner', 'discordEnabled', 'fx3d'];
+      const cur = S(); const allowed = ['autoDetect', 'autoOptimize', 'overlayAuto', 'overlayAlways', 'overlayCorner', 'discordEnabled', 'fx3d'];
       for (const k of allowed) if (k in patch) cur[k] = typeof cur[k] === 'boolean' ? !!patch[k] : String(patch[k]).slice(0, 64);
       if (patch.gameOpts) for (const k of Object.keys(cur.gameOpts)) if (k in patch.gameOpts) cur.gameOpts[k] = !!patch.gameOpts[k];
       state.save(); discord.configure(DISCORD_APP_ID, cur.discordEnabled); updateDiscord(); events.emit('settings', cur);
